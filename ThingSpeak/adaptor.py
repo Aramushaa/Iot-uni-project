@@ -115,7 +115,7 @@ class Adaptor:
         time_since_motion = now - self.last_motion_time[unit_key]
         lux = self.latest_light_value[unit_key]
 
-        if time_since_motion > 60 and lux > 400:
+        if time_since_motion > 30 and lux > 400:
             self.light_status[unit_key] = 0
         else:
             self.light_status[unit_key] = 1

@@ -39,9 +39,6 @@ class Controler():
             broker, port = self.get_broker()
             self.client = MyMQTT(self.clientID, broker, port, self)
             self.client.start()
-            for base in self.sensor_topics:
-                sub = base + "#"
-                self.client.mySubscribe(sub)
         except Exception as e:
             print(f"Failed to initialize MQTT client: {e}")
             return
@@ -185,12 +182,8 @@ class Controler():
             self.scheduler.enter(self.PERIODIC_UPDATE_INTERVAL, 1, self.periodic_hierarchy_update, ())
 
     def subscribe_main_topic(self, new_hierarchy):
-        old = set(self.hierarchy)
         new = set(new_hierarchy)
-        for rem in old - new:
-            t = f"{self.main_topic}/sensors/{rem[0]}/{rem[1]}/{rem[2]}/#"
-            self.client.unsubscribe(t)
-        for add in new - old:
+        for add in new:
             for base in self.sensor_topics:
                 sub = f"{base}{add[0]}/{add[1]}/{add[2]}/#"
                 self.client.mySubscribe(sub)

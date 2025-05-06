@@ -4,6 +4,7 @@ import time
 import json
 import math
 import copy
+import threading
 from control_unit import Controler  
 
 class CU_instancer():
@@ -13,92 +14,68 @@ class CU_instancer():
         self.PERIODIC_UPDATE_INTERVAL = 60  # seconds
         self.NUM_UNITS_PER_CONTROLLER = 5   # number of units each controller manages
 
+        self.controllers = {}
+        self.unit_assignment = {}
+
         self.scheduler = sched.scheduler(time.time, time.sleep)
         self.scheduler.enter(0, 1, self.periodic_unit_list_update, ())
         self.scheduler.run(blocking=False)
 
-        # Immediately load unit list from catalog before creating controllers
-        self.update_unit_list()  # Make sure self.availableUnitsList is filled
+        self.update_unit_list()
         self.controller_creator()
         self.scheduler.enter(0, 2, self.subscribe_to_all, ())
         self.scheduler.run()
 
-    def wrapped_notify(self, name, controller):
-        original_notify = controller.notify
-
-        def new_notify(topic, payload):
-            original_notify(topic, payload)
-
-        return new_notify
-
     def subscribe_to_all(self):
-        self.check_units_and_controllers()
-        temp_units_list = copy.deepcopy(self.availableUnitsList)
-
-        for i in range(self.num_controllers):
-            units_slice = temp_units_list[:self.NUM_UNITS_PER_CONTROLLER]
-            controller_name = f"controller_{i}"
-            self.controllers[controller_name].subscribe_to_topics(units_slice)
-            print(f"[SUBSCRIBE] {controller_name} subscribed to: {units_slice}")
-            temp_units_list = temp_units_list[self.NUM_UNITS_PER_CONTROLLER:]
+        for controller_name, controller in self.controllers.items():
+            assigned_units = [unit for unit, ctrl in self.unit_assignment.items() if ctrl == controller_name]
+            controller.subscribe_to_topics(assigned_units)
+            print(f"[SUBSCRIBE] {controller_name} subscribed to: {assigned_units}")
 
         self.scheduler.enter(self.PERIODIC_UPDATE_INTERVAL, 2, self.subscribe_to_all, ())
 
-    def check_units_and_controllers(self):
-        required_controllers = math.ceil(len(self.availableUnitsList) / self.NUM_UNITS_PER_CONTROLLER)
-        existing_count = len(self.controllers)
-        num_new_needed = required_controllers - existing_count
-
-        if num_new_needed > 0:
-            print(f"[INFO] Adding {num_new_needed} new controller(s)...")
-            for _ in range(num_new_needed):
-                new_name = f"controller_{len(self.controllers)}"
-                controller = Controler(self.catalogAddress)
-                controller.client.notifier = controller
-                controller.notify = self.wrapped_notify(new_name, controller)
-                self.controllers[new_name] = controller
-                print(f"[CREATE] {new_name} created")
-
     def controller_creator(self):
-        self.num_controllers = math.ceil(len(self.availableUnitsList) / self.NUM_UNITS_PER_CONTROLLER)
-        self.controllers = {}
-
-        for i in range(self.num_controllers):
-            controller_name = f"controller_{i}"
+        needed_controllers = math.ceil(len(self.availableUnitsList) / self.NUM_UNITS_PER_CONTROLLER)
+        for i in range(needed_controllers):
+            name = f"controller_{i}"
             controller = Controler(self.catalogAddress)
-            controller.client.notifier = controller  # ✅ FIX HERE
-            controller.notify = self.wrapped_notify(controller_name, controller)
-            self.controllers[controller_name] = controller
-            print(f"[INIT] {controller_name} initialized and notify hooked")
+            # Keep the reference to the controller in the client for notifications
+            controller.client.notifier = controller
+            print(f"[INIT] {name} initialized")
+            self.controllers[name] = controller
+
+        # Distribute units
+        idx = 0
+        for unit in self.availableUnitsList:
+            assigned_controller = f"controller_{idx // self.NUM_UNITS_PER_CONTROLLER}"
+            self.unit_assignment[unit] = assigned_controller
+            idx += 1
 
     def update_unit_list(self):
-        self.availableUnitsList = []
-        for house in self.houses:
-            for floor in house["floors"]:
-                for unit in floor["units"]:
-                    if 'devicesList' in unit and len(unit['devicesList']) > 0:
-                        unitID = f"{house['houseID']}-{floor['floorID']}-{unit['unitID']}"
-                        if unitID not in self.availableUnitsList:
-                            self.availableUnitsList.append(unitID)
-                            print(f"[UNIT] Added {unitID}")
-        self.availableUnitsList.sort()
-
-    def periodic_unit_list_update(self):
         try:
-            response = requests.get(f"{self.catalogAddress}houses")
-            self.houses = response.json()
-            self.update_unit_list()
+            resp = requests.get(f"{self.catalogAddress}houses")
+            houses = resp.json()
+            self.availableUnitsList = []
+            for house in houses:
+                for floor in house.get("floors", []):
+                    for unit in floor.get("units", []):
+                        if unit.get("devicesList"):
+                            uid = f"{house['houseID']}-{floor['floorID']}-{unit['unitID']}"
+                            if uid not in self.availableUnitsList:
+                                self.availableUnitsList.append(uid)
+                                print(f"[UNIT] Added {uid}")
+            self.availableUnitsList.sort()
             print(f"[UPDATE] Unit list refreshed. Total: {len(self.availableUnitsList)}")
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             print(f"[ERROR] Failed to update unit list: {e}")
 
+    def periodic_unit_list_update(self):
+        self.update_unit_list()
         self.scheduler.enter(self.PERIODIC_UPDATE_INTERVAL, 1, self.periodic_unit_list_update, ())
-
 
 if __name__ == "__main__":
     catalogAddress = "http://127.0.0.1:8080/"
     cu_instancer = CU_instancer(catalogAddress)
-
     try:
         while True:
             time.sleep(1)
