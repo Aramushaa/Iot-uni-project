@@ -11,7 +11,7 @@ class MyMQTT:
         self._isSubscriber = False
 
         # Create an instance of paho.mqtt.client
-        self._paho_mqtt = PahoMQTT.Client(client_id=clientID, clean_session=True)
+        self._paho_mqtt = PahoMQTT.Client(client_id=clientID, clean_session=False)
 
 
         # Register the callback methods
@@ -31,6 +31,7 @@ class MyMQTT:
             try:
                 payload = json.loads(msg.payload.decode("utf-8"))
                 self.notifier.notify(msg.topic, payload)
+                print(f"[DEBUG] Raw payload on {msg.topic}: {msg.payload!r}")
             except Exception as e:
                 print(f"[ERROR] Failed to parse MQTT message: {e}")
 

@@ -154,6 +154,8 @@ def get_channel_detail_endpoint():
 @app.route("/devices", methods=["GET"])
 def get_devices():
     device_list = []
+
+    # 1. existing light_sensor entries
     for unit_key, status in adaptor.light_status.items():
         h, f, u = unit_key.split("-")
         device_list.append({
@@ -174,8 +176,34 @@ def get_devices():
             }],
             "lastUpdate": adaptor.last_update.get(unit_key, "NEVER")
         })
-    return jsonify({"devicesList": device_list})
 
+    # 2. add motion_sensor entries
+    now = time.time()
+    THRESHOLD = 30  # seconds of inactivity before reporting “No Motion”
+    for unit_key, ts in adaptor.last_motion_time.items():
+        h, f, u = unit_key.split("-")
+        status = "Detected" if (now - ts) < THRESHOLD else "No Motion"
+        device_list.append({
+            # offset by 1000 to give motion sensors distinct IDs
+            "deviceID": int(f"{h}{f}{u}") + 1000,
+            "deviceName": "motion_sensor",
+            "deviceStatus": status,
+            "availableStatuses": ["Detected", "No Motion"],
+            "deviceLocation": {
+                "houseID": int(h),
+                "floorID": int(f),
+                "unitID": int(u)
+            },
+            "measureType": ["motion"],
+            "availableServices": ["MQTT"],
+            "servicesDetails": [{
+                "serviceType": "MQTT",
+                "topic": [f"ThiefDetector/sensors/{h}/{f}/{u}/motion_sensor"]
+            }],
+            "lastUpdate": adaptor.last_update.get(unit_key, "NEVER")
+        })
+
+    return jsonify({"devicesList": device_list})
 
 if __name__ == "__main__":
     threading.Thread(target=app.run, kwargs={"port": 8099}).start()

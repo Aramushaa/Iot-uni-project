@@ -1,4 +1,9 @@
 {
-    "123456789": "house1-floor2-room3",
-    "987654321": "house2-floor1-room1"
+    "device123": "Living Room",
+    "device124": "Kitchen",
+    "device125": "Bedroom",
+    "motion_sensor_1": "Entrance",
+    "motion_sensor_2": "Hallway",
+    "motion_sensor_3": "Backyard",
+    "592396681": "1"
 }

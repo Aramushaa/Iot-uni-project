@@ -80,9 +80,10 @@ class Device_connector():
         try:
             while True:
                 msg_light, msg_motion = self.get_sen_data()
-                # Send device update to catalog
+
+                # === 1. Update and publish light sensor ===
                 device_payload = copy.deepcopy(self.DCConfiguration["devicesList"][0])
-                device_payload["deviceStatus"] = "ON"  # or based on avg_light
+                device_payload["deviceStatus"] = "ON"
                 device_payload["lastUpdate"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
                 try:
@@ -94,17 +95,18 @@ class Device_connector():
                 logger.info(f"Published light data: {msg_light['e'][0]['v']} to topic: {msg_light['bn']}")
                 time.sleep(self.DATA_SENDING_INTERVAL)
 
+                # === 2. Update and publish motion sensor ===
                 self.senPublisher.publish(msg_motion["bn"], msg_motion)
                 logger.info(f"Published motion data: {msg_motion['e'][0]['v']} to topic: {msg_motion['bn']}")
                 time.sleep(self.DATA_SENDING_INTERVAL)
 
+                # === 3. Register motion sensor for each unit ===
                 for config in self.DCConfiguration["devicesList"]:
                     unit_id = config["deviceLocation"]["unitID"]
                     floor_id = config["deviceLocation"]["floorID"]
                     house_id = config["deviceLocation"]["houseID"]
                     device_id = config["deviceID"]
-                    
-                    # Build MQTT message
+
                     topic = f"ThiefDetector/sensors/{house_id}/{floor_id}/{unit_id}/motion_sensor"
                     msg_motion = {
                         "bn": topic,
@@ -115,11 +117,9 @@ class Device_connector():
                             "v": "Detected"
                         }]
                     }
-                    self.senPublisher.publish(topic, msg_motion)
 
-                    # Build REST payload
                     motion_payload = {
-                        "deviceID": device_id + 1000,  # create a separate range e.g. 11101 for motion
+                        "deviceID": device_id + 1000,
                         "deviceName": "motion_sensor",
                         "deviceStatus": "Detected",
                         "availableStatuses": ["Detected", "No Motion"],
@@ -143,6 +143,9 @@ class Device_connector():
                     except Exception as e:
                         print(f"[ERROR] Could not update motion sensor for {unit_id}: {e}")
 
+                    # ✅ Safely append to devicesList if not already present
+                    if not any(dev["deviceID"] == motion_payload["deviceID"] for dev in self.DCConfiguration["devicesList"]):
+                        self.DCConfiguration["devicesList"].append(motion_payload)
 
         except KeyboardInterrupt:
             logger.info("send_data loop stopped by user.")
@@ -151,6 +154,7 @@ class Device_connector():
         finally:
             self.senPublisher.stop()
             logger.info("MQTT publisher stopped.")
+
 
     def get_sen_data(self):
         light_readings = []

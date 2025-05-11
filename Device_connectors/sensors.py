@@ -30,7 +30,7 @@ class MotionSensor():
 
     def generate_data(self):
         # 10% chance to return True (motion detected)
-        return random.choices([True, False], weights=[1, 9])[0]
+        return random.choices([True, False], weights=[1, 15])[0]
 
     def get_info(self):
         return (self.sensor_id, self.senKind, self.unit)

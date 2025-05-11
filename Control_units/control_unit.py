@@ -100,7 +100,7 @@ class Controler():
     def check_lights_off(self):
         now = time.time()
         for key, last_motion in self.last_motion_time.items():
-            if now - last_motion > 60:
+            if now - last_motion > 30:
                 light_level = self.latest_light_level.get(key, 0)
                 if light_level > 400:
                     h, f, u = key

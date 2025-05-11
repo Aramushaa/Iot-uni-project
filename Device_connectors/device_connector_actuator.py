@@ -122,6 +122,7 @@ class Device_connector_act():
                     print(f"Updating {deviceName} status to {deviceStatusValue}")
                     device["deviceStatus"] = deviceStatusValue
                     device["lastUpdate"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                    
 
 
                     # Optionally, you could also PUT/POST to the catalog to sync the device status
