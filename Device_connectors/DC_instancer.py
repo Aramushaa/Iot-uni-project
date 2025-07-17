@@ -53,16 +53,10 @@ if __name__ == "__main__":
         cherrypy.tree.mount(DC, f'/{DC_name}', conf)
     cherrypy.engine.start()
 
-    import threading
-    threads = []
-    for DC in deviceConnectors.values():
-        t = threading.Thread(target=DC.send_data, daemon=True)
-        threads.append(t)
-        t.start()
-
     try:
-        while True:
-            time.sleep(1)
+        cherrypy.engine.block() # CherryPy's block() is better for this
     except KeyboardInterrupt:
         print("Keyboard interrupt detected. Shutting down...")
+        for dc in deviceConnectors.values():
+            dc.stop_sending_data() # Ensure all connectors are stopped
         cherrypy.engine.stop()
