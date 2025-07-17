@@ -1,17 +1,15 @@
+# changelog:
+# - 2025-07-17: Implemented a graceful shutdown procedure for CherryPy and MQTT clients.
+# - 2025-07-17: Simplified registration loop.
+
 from device_connector_actuator import Device_connector_act
 import json
 import time
 import cherrypy
 
-
 if __name__ == "__main__":
-    # 1) Set the ThiefDetector catalog URL
-    catalog_url = "http://127.0.0.1:8080/"
-
-    # 2) Path to your actuator setting file
     settingActFile = "Device_connectors/setting_act.json"
 
-    # 3) Load the actuator configuration (which should have "clientID" and "DCID_dict")
     try:
         with open(settingActFile) as fp:
             settingAct = json.load(fp)
@@ -22,68 +20,49 @@ if __name__ == "__main__":
         print(f"Error parsing JSON in '{settingActFile}': {e}")
         exit(1)
 
+    catalog_url = settingAct.get("catalogURL", "http://127.0.0.1:8080/")
     baseClientID = settingAct["clientID"]
     DCID_act_dict = settingAct["DCID_dict"]
 
-    # 4) Create a dictionary to store Device_connector_act instances
     deviceConnectorsAct = {}
-
-    # 5) For each DCID in DCID_act_dict, create the Device_connector_act object
     for DCID, plantConfig in DCID_act_dict.items():
         DC_name = f"arduino_{DCID}"
-        deviceConnectorsAct[DC_name] = Device_connector_act(
+        connector = Device_connector_act(
             catalog_url,
             plantConfig,
             baseClientID,
             DCID
         )
-        print(f"Device_connector_act created for {DC_name}")
+        deviceConnectorsAct[DC_name] = connector
+        cherrypy.tree.mount(connector, f'/{DC_name}', {
+            '/': {
+                'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
+                'tools.sessions.on': True
+            }
+        })
+        print(f"Mounted {DC_name} to CherryPy")
+    
+    # Register all devices once at the start
+    print("Registering all actuator devices...")
+    for DC in deviceConnectorsAct.values():
+        DC.registerer()
+        time.sleep(0.1) # small delay
 
-    # 6) CherryPy configuration
-    conf = {
-        "/": {
-            'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
-            'tools.sessions.on': True
-        }
-    }
     cherrypy.config.update({'server.socket_port': 8086})
-
-    # 7) Main loop for registration, server mounting, etc.
+    cherrypy.engine.start()
+    
+    # --- CHANGE: The main loop is now simpler and more robust ---
     try:
-        t = 0
-        while t < 600:  # run for 600 iterations (10 minutes)
-            # Every 100 seconds, register devices
-            if t % 100 == 0:
-                for DC_name, DC in deviceConnectorsAct.items():
-                    DC.registerer()  # register the devices for this actuator connector
-                    time.sleep(1)
-
-                    # Mount the device in CherryPy only on the first iteration
-                    if t == 0:
-                        cherrypy.tree.mount(DC, f'/{DC_name}', conf)
-                        print(f"Mounted {DC_name} to CherryPy")
-                    time.sleep(1)
-
-                # Start the CherryPy server on the first iteration
-                if t == 0:
-                    cherrypy.engine.start()
-                    print("CherryPy server started on port 8086")
-
-            # Wait 1 second before the next iteration
-            time.sleep(1)
-            t += 1
-
+        print("Server started. Press Ctrl+C to shut down.")
+        cherrypy.engine.block()
     except KeyboardInterrupt:
-        print("Keyboard interrupt detected. Shutting down...")
-        # Gracefully stop each actuator's MQTT client
-        for DC in deviceConnectorsAct.values():
-            DC.stop()
-        # Stop CherryPy
-        cherrypy.engine.block()
-
+        print("\nKeyboard interrupt detected. Shutting down...")
     finally:
-        # Ensure each device connector is stopped
+        # --- CHANGE: Graceful shutdown logic ---
+        print("Stopping all actuator MQTT clients...")
         for DC in deviceConnectorsAct.values():
             DC.stop()
-        # Ensure the CherryPy service is terminated properly
-        cherrypy.engine.block()
+        
+        print("Stopping CherryPy server...")
+        cherrypy.engine.stop()
+        print("Server shut down gracefully.")
