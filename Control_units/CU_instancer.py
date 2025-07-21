@@ -1,83 +1,133 @@
+# changelog:
+# - 2025-07-21: Refactored to manage a SINGLE MQTT client to prevent client ID collisions.
+# - 2025-07-21: The instancer now acts as a dispatcher, forwarding messages to the correct controller.
+
 import requests
-import sched
 import time
 import json
 import math
-import copy
 import threading
-from control_unit import Controler  
+from control_unit import Controler
+from MyMQTT2 import MyMQTT # Import MyMQTT here
 
 class CU_instancer():
     def __init__(self, catalogAddress):
-        self.catalogAddress = catalogAddress
-        self.availableUnitsList = []
-        self.PERIODIC_UPDATE_INTERVAL = 60  # seconds
-        self.NUM_UNITS_PER_CONTROLLER = 5   # number of units each controller manages
+        self.catalogAddress = catalogAddress.rstrip('/')
+        self.PERIODIC_UPDATE_INTERVAL = 60
+        self.NUM_UNITS_PER_CONTROLLER = 5
 
         self.controllers = {}
         self.unit_assignment = {}
-
-        self.scheduler = sched.scheduler(time.time, time.sleep)
-        self.scheduler.enter(0, 1, self.periodic_unit_list_update, ())
-        self.scheduler.run(blocking=False)
-
-        self.update_unit_list()
-        self.controller_creator()
-        self.scheduler.enter(0, 2, self.subscribe_to_all, ())
-        self.scheduler.run()
-
-    def subscribe_to_all(self):
-        for controller_name, controller in self.controllers.items():
-            assigned_units = [unit for unit, ctrl in self.unit_assignment.items() if ctrl == controller_name]
-            controller.subscribe_to_topics(assigned_units)
-            print(f"[SUBSCRIBE] {controller_name} subscribed to: {assigned_units}")
-
-        self.scheduler.enter(self.PERIODIC_UPDATE_INTERVAL, 2, self.subscribe_to_all, ())
-
-    def controller_creator(self):
-        needed_controllers = math.ceil(len(self.availableUnitsList) / self.NUM_UNITS_PER_CONTROLLER)
-        for i in range(needed_controllers):
-            name = f"controller_{i}"
-            controller = Controler(self.catalogAddress)
-            # Keep the reference to the controller in the client for notifications
-            controller.client.notifier = controller
-            print(f"[INIT] {name} initialized")
-            self.controllers[name] = controller
-
-        # Distribute units
-        idx = 0
-        for unit in self.availableUnitsList:
-            assigned_controller = f"controller_{idx // self.NUM_UNITS_PER_CONTROLLER}"
-            self.unit_assignment[unit] = assigned_controller
-            idx += 1
-
-    def update_unit_list(self):
+        
+        # --- CHANGE: The instancer now owns the single MQTT client ---
+        self.main_topic = self.get_main_topic()
+        self.clientID = "ThiefDetector_Controller_Instancer" # A unique ID for the instancer
         try:
-            resp = requests.get(f"{self.catalogAddress}houses")
+            broker, port = self.get_broker()
+            # The 'notifier' is now the instancer itself
+            self.client = MyMQTT(self.clientID, broker, port, self) 
+            self.client.start()
+            print("[MQTT] Instancer's MQTT client started.")
+        except Exception as e:
+            print(f"[FATAL] Could not start MQTT client for instancer: {e}")
+            return
+        
+        # Start by updating the unit list and creating controllers
+        self.update_and_rebalance_controllers()
+        
+        # Start a periodic check to rebalance if new units are added
+        self.scheduler = threading.Timer(self.PERIODIC_UPDATE_INTERVAL, self.update_and_rebalance_controllers)
+        self.scheduler.daemon = True
+        self.scheduler.start()
+
+    def get_main_topic(self):
+        try:
+            r = requests.get(f"{self.catalogAddress}/topic")
+            return r.json()
+        except: return "ThiefDetector"
+
+    def get_broker(self):
+        r = requests.get(f"{self.catalogAddress}/broker")
+        b = r.json()
+        return b.get("IP"), int(b.get("port"))
+        
+    def notify(self, topic, payload):
+        """This is the single entry point for all MQTT messages."""
+        print(f"[DISPATCH] Received on topic: {topic}")
+        try:
+            parts = topic.split("/")
+            if len(parts) < 5: return
+
+            # Find which controller is responsible for this unit
+            unit_key_str = f"{parts[2]}-{parts[3]}-{parts[4]}"
+            assigned_controller_name = self.unit_assignment.get(unit_key_str)
+            
+            if assigned_controller_name:
+                controller = self.controllers.get(assigned_controller_name)
+                if controller:
+                    # Forward the message to the correct controller
+                    controller.process_message(topic, payload)
+                else:
+                    print(f"[WARN] No controller instance found for '{assigned_controller_name}'")
+            else:
+                print(f"[WARN] No controller assigned for unit '{unit_key_str}'")
+
+        except Exception as e:
+            print(f"[ERROR] Error in dispatcher notify(): {e}")
+
+    def update_and_rebalance_controllers(self):
+        print("[INFO] Checking for unit updates and rebalancing controllers...")
+        try:
+            resp = requests.get(f"{self.catalogAddress}/houses")
             houses = resp.json()
-            self.availableUnitsList = []
+            
+            current_units = set()
             for house in houses:
                 for floor in house.get("floors", []):
                     for unit in floor.get("units", []):
-                        if unit.get("devicesList"):
-                            uid = f"{house['houseID']}-{floor['floorID']}-{unit['unitID']}"
-                            if uid not in self.availableUnitsList:
-                                self.availableUnitsList.append(uid)
-                                print(f"[UNIT] Added {uid}")
-            self.availableUnitsList.sort()
-            print(f"[UPDATE] Unit list refreshed. Total: {len(self.availableUnitsList)}")
-        except Exception as e:
-            print(f"[ERROR] Failed to update unit list: {e}")
+                        uid = f"{house['houseID']}-{floor['floorID']}-{unit['unitID']}"
+                        current_units.add(uid)
 
-    def periodic_unit_list_update(self):
-        self.update_unit_list()
-        self.scheduler.enter(self.PERIODIC_UPDATE_INTERVAL, 1, self.periodic_unit_list_update, ())
+            if set(self.unit_assignment.keys()) == current_units:
+                print("[INFO] No change in units. No rebalance needed.")
+                return
+
+            print("[INFO] Unit list has changed. Rebalancing controllers.")
+            self.availableUnitsList = sorted(list(current_units))
+
+            # Create controllers
+            needed_controllers = math.ceil(len(self.availableUnitsList) / self.NUM_UNITS_PER_CONTROLLER)
+            for i in range(needed_controllers):
+                name = f"controller_{i}"
+                if name not in self.controllers:
+                    # Pass the shared MQTT client to the controller
+                    self.controllers[name] = Controler(self.catalogAddress, self.client, self.main_topic)
+                    print(f"[INIT] Created {name}")
+
+            # Assign units to controllers
+            self.unit_assignment.clear()
+            for idx, unit in enumerate(self.availableUnitsList):
+                controller_idx = idx // self.NUM_UNITS_PER_CONTROLLER
+                assigned_controller = f"controller_{controller_idx}"
+                self.unit_assignment[unit] = assigned_controller
+            
+            print(f"[REBALANCE] Unit assignment updated: {self.unit_assignment}")
+            
+            # Subscribe to all sensor topics with the single client
+            topic = f"{self.main_topic}/sensors/#"
+            self.client.mySubscribe(topic)
+            print(f"[SUBSCRIBE] Instancer subscribed to master topic: {topic}")
+
+        except Exception as e:
+            print(f"[ERROR] Failed during rebalance: {e}")
+
 
 if __name__ == "__main__":
     catalogAddress = "http://127.0.0.1:8080/"
     cu_instancer = CU_instancer(catalogAddress)
     try:
         while True:
-            time.sleep(1)
+            time.sleep(10)
     except KeyboardInterrupt:
-        print("[EXIT] Keyboard interrupt detected. Shutting down...")
+        print("\n[EXIT] Shutting down...")
+        # The MQTT client will stop automatically since it's in a daemon thread.
