@@ -1,7 +1,7 @@
 {
     "projectOwner": "ThiefDetector Team",
     "projectName": "ThiefDetector",
-    "lastUpdate": "2025-07-21 11:33:43",
+    "lastUpdate": "2025-07-21 17:46:10",
     "broker": {
         "IP": "test.mosquitto.org",
         "port": 1883
@@ -23,20 +23,20 @@
                             "devicesList": [
                                 {
                                     "deviceID": 10101,
-                                    "deviceName": "light_sensor",
-                                    "deviceStatus": "ON",
+                                    "deviceName": "light_switch",
+                                    "deviceStatus": "OFF",
                                     "availableStatuses": [
                                         "DISABLE",
                                         "OFF",
                                         "ON"
                                     ],
                                     "deviceLocation": {
-                                        "houseID": 1,
-                                        "floorID": 1,
-                                        "unitID": 1
+                                        "houseID": "1",
+                                        "floorID": "1",
+                                        "unitID": "1"
                                     },
                                     "measureType": [
-                                        "light"
+                                        "Switch"
                                     ],
                                     "availableServices": [
                                         "MQTT"
@@ -45,11 +45,11 @@
                                         {
                                             "serviceType": "MQTT",
                                             "topic": [
-                                                "ThiefDetector/sensors/1/1/1/light_sensor"
+                                                "ThiefDetector/commands/1/1/1/light_switch"
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-21 11:33:31"
+                                    "lastUpdate": "2025-07-21 17:46:09"
                                 }
                             ],
                             "lastUpdate": "2024-12-28 14:30:00"
@@ -61,20 +61,20 @@
                             "devicesList": [
                                 {
                                     "deviceID": 10102,
-                                    "deviceName": "light_sensor",
-                                    "deviceStatus": "ON",
+                                    "deviceName": "light_switch",
+                                    "deviceStatus": "OFF",
                                     "availableStatuses": [
                                         "DISABLE",
                                         "OFF",
                                         "ON"
                                     ],
                                     "deviceLocation": {
-                                        "houseID": 1,
-                                        "floorID": 1,
-                                        "unitID": 2
+                                        "houseID": "1",
+                                        "floorID": "1",
+                                        "unitID": "2"
                                     },
                                     "measureType": [
-                                        "light"
+                                        "Switch"
                                     ],
                                     "availableServices": [
                                         "MQTT"
@@ -83,11 +83,11 @@
                                         {
                                             "serviceType": "MQTT",
                                             "topic": [
-                                                "ThiefDetector/sensors/1/1/2/light_sensor"
+                                                "ThiefDetector/commands/1/1/2/light_switch"
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-21 11:33:33"
+                                    "lastUpdate": "2025-07-21 17:46:09"
                                 }
                             ],
                             "lastUpdate": "2024-12-28 14:45:00"
@@ -104,20 +104,20 @@
                             "devicesList": [
                                 {
                                     "deviceID": 10103,
-                                    "deviceName": "light_sensor",
-                                    "deviceStatus": "ON",
+                                    "deviceName": "light_switch",
+                                    "deviceStatus": "OFF",
                                     "availableStatuses": [
                                         "DISABLE",
                                         "OFF",
                                         "ON"
                                     ],
                                     "deviceLocation": {
-                                        "houseID": 1,
-                                        "floorID": 2,
-                                        "unitID": 1
+                                        "houseID": "1",
+                                        "floorID": "2",
+                                        "unitID": "1"
                                     },
                                     "measureType": [
-                                        "light"
+                                        "Switch"
                                     ],
                                     "availableServices": [
                                         "MQTT"
@@ -126,11 +126,11 @@
                                         {
                                             "serviceType": "MQTT",
                                             "topic": [
-                                                "ThiefDetector/sensors/1/2/1/light_sensor"
+                                                "ThiefDetector/commands/1/2/1/light_switch"
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-21 11:33:33"
+                                    "lastUpdate": "2025-07-21 17:46:09"
                                 }
                             ],
                             "lastUpdate": "2024-12-28 14:30:00"
@@ -155,20 +155,20 @@
                             "devicesList": [
                                 {
                                     "deviceID": 20101,
-                                    "deviceName": "light_sensor",
-                                    "deviceStatus": "ON",
+                                    "deviceName": "light_switch",
+                                    "deviceStatus": "OFF",
                                     "availableStatuses": [
                                         "DISABLE",
                                         "OFF",
                                         "ON"
                                     ],
                                     "deviceLocation": {
-                                        "houseID": 2,
-                                        "floorID": 1,
-                                        "unitID": 1
+                                        "houseID": "2",
+                                        "floorID": "1",
+                                        "unitID": "1"
                                     },
                                     "measureType": [
-                                        "light"
+                                        "Switch"
                                     ],
                                     "availableServices": [
                                         "MQTT"
@@ -177,11 +177,11 @@
                                         {
                                             "serviceType": "MQTT",
                                             "topic": [
-                                                "ThiefDetector/sensors/2/1/1/light_sensor"
+                                                "ThiefDetector/commands/2/1/1/light_switch"
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-21 11:33:38"
+                                    "lastUpdate": "2025-07-21 17:46:10"
                                 }
                             ],
                             "lastUpdate": "2024-12-28 14:30:00"
@@ -193,20 +193,20 @@
                             "devicesList": [
                                 {
                                     "deviceID": 20102,
-                                    "deviceName": "light_sensor",
-                                    "deviceStatus": "ON",
+                                    "deviceName": "light_switch",
+                                    "deviceStatus": "OFF",
                                     "availableStatuses": [
                                         "DISABLE",
                                         "OFF",
                                         "ON"
                                     ],
                                     "deviceLocation": {
-                                        "houseID": 2,
-                                        "floorID": 1,
-                                        "unitID": 2
+                                        "houseID": "2",
+                                        "floorID": "1",
+                                        "unitID": "2"
                                     },
                                     "measureType": [
-                                        "light"
+                                        "Switch"
                                     ],
                                     "availableServices": [
                                         "MQTT"
@@ -215,11 +215,11 @@
                                         {
                                             "serviceType": "MQTT",
                                             "topic": [
-                                                "ThiefDetector/sensors/2/1/2/light_sensor"
+                                                "ThiefDetector/commands/2/1/2/light_switch"
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-21 11:33:43"
+                                    "lastUpdate": "2025-07-21 17:46:10"
                                 }
                             ],
                             "lastUpdate": "2024-12-28 14:45:00"
@@ -236,20 +236,20 @@
                             "devicesList": [
                                 {
                                     "deviceID": 20103,
-                                    "deviceName": "light_sensor",
-                                    "deviceStatus": "ON",
+                                    "deviceName": "light_switch",
+                                    "deviceStatus": "OFF",
                                     "availableStatuses": [
                                         "DISABLE",
                                         "OFF",
                                         "ON"
                                     ],
                                     "deviceLocation": {
-                                        "houseID": 2,
-                                        "floorID": 2,
-                                        "unitID": 1
+                                        "houseID": "2",
+                                        "floorID": "2",
+                                        "unitID": "1"
                                     },
                                     "measureType": [
-                                        "light"
+                                        "Switch"
                                     ],
                                     "availableServices": [
                                         "MQTT"
@@ -258,11 +258,11 @@
                                         {
                                             "serviceType": "MQTT",
                                             "topic": [
-                                                "ThiefDetector/sensors/2/2/1/light_sensor"
+                                                "ThiefDetector/commands/2/2/1/light_switch"
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-21 11:32:38"
+                                    "lastUpdate": "2025-07-21 17:46:10"
                                 }
                             ],
                             "lastUpdate": "2024-12-28 14:30:00"
