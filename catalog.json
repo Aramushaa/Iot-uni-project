@@ -1,23 +1,26 @@
 {
     "projectOwner": "ThiefDetector Team",
     "projectName": "ThiefDetector",
-    "lastUpdate": "2025-07-28 13:32:01",
+    "lastUpdate": "2025-07-28 16:29:03",
     "broker": {
         "IP": "mosquitto",
         "port": 1883
     },
+    "topic": "ThiefDetector",
     "housesList": [
         {
             "houseID": "1",
-            "houseName": "Main House",
+            "houseName": "House 1",
+            "installationDate": "2024-12-01",
+            "lastUpdate": "2024-12-28 14:30:00",
             "floors": [
                 {
                     "floorID": "1",
                     "units": [
                         {
                             "unitID": "1",
-                            "urlSensors": "http://sensors:8085/raspberry_1-1-1/devices",
-                            "urlActuators": "http://actuators:8086/arduino_1-1-1/devices",
+                            "urlSensors": "http://sensors:8085/raspberry_1-1-1",
+                            "urlActuators": "http://actuators:8086/arduino_1-1-1",
                             "devicesList": [
                                 {
                                     "deviceID": 20101,
@@ -46,14 +49,14 @@
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-28 13:32:01"
+                                    "lastUpdate": "2025-07-28 16:29:03"
                                 }
                             ]
                         },
                         {
                             "unitID": "2",
-                            "urlSensors": "http://sensors:8085/raspberry_1-1-2/devices",
-                            "urlActuators": "http://actuators:8086/arduino_1-1-2/devices",
+                            "urlSensors": "http://sensors:8085/raspberry_1-1-2",
+                            "urlActuators": "http://actuators:8086/arduino_1-1-2",
                             "devicesList": [
                                 {
                                     "deviceID": 20102,
@@ -82,7 +85,7 @@
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-28 13:32:01"
+                                    "lastUpdate": "2025-07-28 16:29:03"
                                 }
                             ]
                         }
@@ -93,8 +96,8 @@
                     "units": [
                         {
                             "unitID": "1",
-                            "urlSensors": "http://sensors:8085/raspberry_1-2-1/devices",
-                            "urlActuators": "http://actuators:8086/arduino_1-2-1/devices",
+                            "urlSensors": "http://sensors:8085/raspberry_1-2-1",
+                            "urlActuators": "http://actuators:8086/arduino_1-2-1",
                             "devicesList": [
                                 {
                                     "deviceID": 20103,
@@ -123,7 +126,7 @@
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-28 13:32:01"
+                                    "lastUpdate": "2025-07-28 16:29:03"
                                 }
                             ]
                         }
@@ -133,15 +136,17 @@
         },
         {
             "houseID": "2",
-            "houseName": "Guest House",
+            "houseName": "House 2",
+            "installationDate": "2024-12-05",
+            "lastUpdate": "2024-12-28 14:30:00",
             "floors": [
                 {
                     "floorID": "1",
                     "units": [
                         {
                             "unitID": "1",
-                            "urlSensors": "http://sensors:8085/raspberry_2-1-1/devices",
-                            "urlActuators": "http://actuators:8086/arduino_2-1-1/devices",
+                            "urlSensors": "http://sensors:8085/raspberry_2-1-1",
+                            "urlActuators": "http://actuators:8086/arduino_2-1-1",
                             "devicesList": [
                                 {
                                     "deviceID": 30101,
@@ -170,14 +175,14 @@
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-28 13:32:01"
+                                    "lastUpdate": "2025-07-28 16:29:03"
                                 }
                             ]
                         },
                         {
                             "unitID": "2",
-                            "urlSensors": "http://sensors:8085/raspberry_2-1-2/devices",
-                            "urlActuators": "http://actuators:8086/arduino_2-1-2/devices",
+                            "urlSensors": "http://sensors:8085/raspberry_2-1-2",
+                            "urlActuators": "http://actuators:8086/arduino_2-1-2",
                             "devicesList": [
                                 {
                                     "deviceID": 30102,
@@ -206,7 +211,7 @@
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-28 13:32:01"
+                                    "lastUpdate": "2025-07-28 16:29:03"
                                 }
                             ]
                         }
@@ -217,8 +222,8 @@
                     "units": [
                         {
                             "unitID": "1",
-                            "urlSensors": "http://sensors:8085/raspberry_2-2-1/devices",
-                            "urlActuators": "http://actuators:8086/arduino_2-2-1/devices",
+                            "urlSensors": "http://sensors:8085/raspberry_2-2-1",
+                            "urlActuators": "http://actuators:8086/arduino_2-2-1",
                             "devicesList": [
                                 {
                                     "deviceID": 30103,
@@ -247,7 +252,7 @@
                                             ]
                                         }
                                     ],
-                                    "lastUpdate": "2025-07-28 13:32:01"
+                                    "lastUpdate": "2025-07-28 16:29:03"
                                 }
                             ]
                         }

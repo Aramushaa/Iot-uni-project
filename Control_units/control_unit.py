@@ -2,24 +2,22 @@
 # - 2025-07-21: Removed MQTT client management from this class. It is now handled by CU_instancer.
 # - 2025-07-21: The class now processes messages handed to it, rather than subscribing itself.
 
+# - 2025-07-28: Merged periodic checks into a single function.
+# - 2025-07-28: Added logic to turn lights ON when light is low, regardless of motion.
+# - 2025-07-28: Added a "reason" to every command for better UI feedback.
+
 import json
 import time
 import sched
 import requests
 import copy
 from datetime import datetime
-import threading # Added threading for the scheduler
-
-# Mapping from (houseID, floorID, unitID) to deviceID for light_switch
-DEVICE_ID_MAPPING = {
-    (1, 1, 1): 10101, (1, 1, 2): 10102, (1, 2, 1): 10103,
-    (2, 1, 1): 20101, (2, 1, 2): 20102, (2, 2, 1): 20103,
-}
+import threading
 
 class Controler():
     def __init__(self, catalogAddress, mqtt_client, main_topic):
         self.catalogAddress = catalogAddress.rstrip('/')
-        self.client = mqtt_client  # Use the client provided by the instancer
+        self.client = mqtt_client
         self.main_topic = main_topic
         
         self.device_status_cache = {}
@@ -27,9 +25,8 @@ class Controler():
         self.latest_light_level = {}
 
         self.scheduler = sched.scheduler(time.time, time.sleep)
-        self.scheduler.enter(10, 1, self.check_lights_off, ())
+        self.scheduler.enter(15, 1, self.check_environmental_conditions, ())
         
-        # Each controller runs its own check in a separate thread
         self.thread = threading.Thread(target=self.scheduler.run)
         self.thread.daemon = True
         self.thread.start()
@@ -40,12 +37,9 @@ class Controler():
         }
 
     def process_message(self, topic, payload):
-        """This method is called by CU_instancer to process a message."""
         try:
             parts = topic.split("/")
-            if len(parts) < 6:
-                print(f"[WARN] Controller received unexpected topic format: {topic}")
-                return
+            if len(parts) < 6: return
 
             _, _, houseID, floorID, unitID, sensorType = parts[:6]
             key = (int(houseID), int(floorID), int(unitID))
@@ -57,30 +51,39 @@ class Controler():
                 if value == "Detected":
                     self.last_motion_time[key] = time.time()
                     print(f"[ALERT] Motion in {key[0]}/{key[1]}/{key[2]}")
-                    self.send_command(key, "light_switch", "ON")
+                    self.send_command(key, "light_switch", "ON", "Motion Detected")
             elif sensorType == "light_sensor":
                 self.latest_light_level[key] = float(value)
 
-        except (ValueError, IndexError, KeyError) as e:
-            print(f"[ERROR] Controller failed to process message on topic '{topic}': {e}")
+        except Exception as e:
+            print(f"[ERROR] Controller failed to process message: {e}")
 
-    def check_lights_off(self):
+    def check_environmental_conditions(self):
         now = time.time()
-        # Use list() to create a copy, allowing safe deletion during iteration
-        for key in list(self.last_motion_time.keys()):
-            if now - self.last_motion_time.get(key, now) > 30:
-                light_level = self.latest_light_level.get(key, 0)
-                if light_level > 400:
-                    h, f, u = key
-                    print(f"[ACTION] No motion & bright -> Turn OFF light in {h}/{f}/{u}")
-                    self.send_command(key, "light_switch", "OFF")
-                    # Remove the timestamp to prevent repeatedly sending OFF command
-                    del self.last_motion_time[key]
-        
-        # Reschedule the check
-        self.scheduler.enter(10, 1, self.check_lights_off, ())
+        all_known_keys = set(self.latest_light_level.keys()) | set(self.device_status_cache.keys())
 
-    def send_command(self, key, device_name, command):
+        for key in all_known_keys:
+            light_level = self.latest_light_level.get(key, 1000)
+            last_motion = self.last_motion_time.get(key, 0)
+            is_light_on = self.device_status_cache.get(key, {}).get("light_switch") == "ON"
+
+            # SCENARIO 1: Turn light ON if it's dark
+            if not is_light_on and light_level < 400:
+                print(f"[ACTION] Low light in {key} -> Turn ON light")
+                self.send_command(key, "light_switch", "ON", "Low Light Level")
+                continue
+
+            # SCENARIO 2: Turn light OFF if no motion and bright
+            if is_light_on and (now - last_motion > 30):
+                if light_level > 400:
+                    print(f"[ACTION] No motion & bright in {key} -> Turn OFF light")
+                    self.send_command(key, "light_switch", "OFF", "Auto-Off: Bright & No Motion")
+                    if key in self.last_motion_time:
+                        del self.last_motion_time[key]
+        
+        self.scheduler.enter(15, 1, self.check_environmental_conditions, ())
+
+    def send_command(self, key, device_name, command, reason):
         houseID, floorID, unitID = key
         topic = f"{self.main_topic}/commands/{houseID}/{floorID}/{unitID}/{device_name}"
         msg = copy.deepcopy(self.msg_template)
@@ -88,23 +91,39 @@ class Controler():
         msg["e"][0]["t"] = str(time.time())
         msg["e"][0]["v"] = command
         self.client.myPublish(topic, msg)
-        print(f"[CMD] {command} -> {topic}")
-        self.update_catalog(key, command)
+        print(f"[CMD] {command} -> {topic} (Reason: {reason})")
+        self.update_catalog(key, device_name, command, reason)
         
-    def update_catalog(self, key, new_status):
-        did = DEVICE_ID_MAPPING.get(key)
-        if not did: return
-
-        if self.device_status_cache.get(key) == new_status:
-            return # Status unchanged, no update needed
-
-        self.device_status_cache[key] = new_status
-        payload = {
-            "deviceID": did,
-            "deviceLocation": {"houseID": str(key[0]), "floorID": str(key[1]), "unitID": str(key[2])},
-            "deviceStatus": new_status, "lastUpdate": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
+    def update_catalog(self, key, device_name, new_status, reason):
+        if key not in self.device_status_cache:
+            self.device_status_cache[key] = {}
+        
+        if self.device_status_cache[key].get(device_name) == new_status:
+            return
+        
+        self.device_status_cache[key][device_name] = new_status
+        
         try:
-            requests.put(f"{self.catalogAddress}/devices", json=payload)
+            r = requests.get(f"{self.catalogAddress}/houses")
+            houses = r.json()
+            device_to_update = None
+            for house in houses:
+                if str(house.get("houseID")) == str(key[0]):
+                    for floor in house.get("floors", []):
+                        if str(floor.get("floorID")) == str(key[1]):
+                            for unit in floor.get("units", []):
+                                if str(unit.get("unitID")) == str(key[2]):
+                                    for device in unit.get("devicesList", []):
+                                        if device.get("deviceName") == device_name:
+                                            device_to_update = device
+                                            break
+            
+            if device_to_update:
+                device_to_update["deviceStatus"] = new_status
+                device_to_update["lastUpdate"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # Add the reason to the device's data
+                device_to_update["lastCommandReason"] = reason
+                requests.put(f"{self.catalogAddress}/devices", json=device_to_update)
+            
         except Exception as e:
             print(f"[ERROR] Failed to update catalog: {e}")
