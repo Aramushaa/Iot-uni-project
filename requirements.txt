@@ -1,0 +1,6 @@
+# requirements.txt
+requests
+cherrypy
+paho-mqtt
+flask
+telepot

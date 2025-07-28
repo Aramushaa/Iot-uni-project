@@ -9,7 +9,7 @@ settingSenFile = os.path.abspath("Device_connectors/setting_sen.json")
 print(f"✅ Loading setting_sen.json from: {settingSenFile}")
 
 if __name__ == "__main__":
-    catalog_url = "http://127.0.0.1:8080/"
+    catalog_url = "http://catalog:8080/"
 
     try:
         with open(settingSenFile) as fp:
@@ -48,6 +48,7 @@ if __name__ == "__main__":
         }
     }
     cherrypy.config.update({'server.socket_port': 8085})
+    cherrypy.config.update({'server.socket_host': '0.0.0.0', 'server.socket_port': 8085})
 
     for DC_name, DC in deviceConnectors.items():
         cherrypy.tree.mount(DC, f'/{DC_name}', conf)
