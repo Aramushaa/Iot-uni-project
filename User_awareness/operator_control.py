@@ -5,6 +5,7 @@
 # changelog:
 # - 2025-07-27: Corrected the URL in fetch_unit_devices to include the /devices endpoint.
 # - 2025-07-27: Removed debug prints for cleaner logs.
+# - 2025-07-29: Added logic to inject `lastCommandReason` for light switches based on motion alerts.
 
 import requests
 import cherrypy
@@ -98,7 +99,30 @@ class OperatorControl:
         for house_id, house in real_time_houses.items():
             for floor in house.get("floors", []):
                 for unit in floor.get("units", []):
+                    # Fetch the raw device list first
                     unit["devicesList"] = self.fetch_unit_devices(unit)
+
+                    # START of the new logic
+                    unit_key = f"{house.get('houseID')}-{floor.get('floorID')}-{unit.get('unitID')}"
+                    
+                    # Check if the current unit has a recent motion alert
+                    unit_has_active_alert = (
+                        unit_key in self.motion_alerts and
+                        time.time() - self.motion_alerts.get(unit_key, 0) < 300 # 5-minute window for alerts
+                    )
+
+                    # Add the 'lastCommandReason' to light switches
+                    for device in unit.get("devicesList", []):
+                        if "light_switch" in device.get("deviceName", ""):
+                            if device.get("deviceStatus") == "ON":
+                                if unit_has_active_alert:
+                                    device["lastCommandReason"] = "Motion Detected"
+                                else:
+                                    device["lastCommandReason"] = "Automatic Rule"
+                            else:  # Status is OFF
+                                device["lastCommandReason"] = "No Motion / Timed Out"
+                    # END of the new logic
+
         return real_time_houses
 
     def fetch_unit_devices(self, unit):
@@ -108,7 +132,6 @@ class OperatorControl:
         for url in urls_to_fetch:
             if not url: continue
             try:
-                # THIS IS THE FIX: adding "/devices" to the URL
                 full_url = f"{url.rstrip('/')}/devices"
                 response = requests.get(full_url, timeout=3)
                 response.raise_for_status()
