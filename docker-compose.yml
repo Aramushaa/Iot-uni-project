@@ -21,6 +21,8 @@ services:
     volumes:
       - .:/app
     restart: on-failure
+    environment:
+      - TZ=Europe/Rome
 
   # Sensor Connectors
   sensors:
@@ -34,6 +36,8 @@ services:
       - catalog
       - mosquitto
     restart: on-failure
+    environment:
+      - TZ=Europe/Rome
 
   # Actuator Connectors
   actuators:
@@ -47,6 +51,8 @@ services:
       - catalog
       - mosquitto
     restart: on-failure
+    environment:
+      - TZ=Europe/Rome
 
   # Control Unit
   control-unit:
@@ -58,6 +64,8 @@ services:
       - catalog
       - mosquitto
     restart: on-failure
+    environment:
+      - TZ=Europe/Rome
 
   # ThingSpeak Adaptor
   adaptor:
@@ -85,6 +93,8 @@ services:
         - sensors
         - actuators
       restart: on-failure
+      environment:
+      - TZ=Europe/Rome
 
   # Web Frontend
   frontend:
@@ -98,3 +108,16 @@ services:
       volumes:
         - .:/app
       restart: on-failure
+
+  telegram-bot:
+    build: .
+    working_dir: /app/User_awareness
+    command: python telegram_bot.py
+    volumes:
+      - .:/app
+    # FIX: Ensure operator-control is running before the bot starts
+    depends_on:
+      - operator-control
+    restart: on-failure
+    environment:
+      - TZ=Europe/Rome

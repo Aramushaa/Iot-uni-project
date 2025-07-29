@@ -1,52 +1,53 @@
-// app.js - Final Corrected Version
+// app.js - v5 Final Version with Enhanced UI Logic
 
 // Configuration
 const API_BASE_URL = "http://localhost:8095"; 
-const REFRESH_INTERVAL = 5000; // 5 seconds
+const REFRESH_INTERVAL = 5000;
+const ALERT_TIMEOUT = 30; // Seconds an alert stays active on the dashboard
 
 // DOM Elements
 const houseGrid = document.getElementById('house-grid');
 const themeToggleButton = document.getElementById('theme-toggle');
 const refreshTimerDiv = document.getElementById('refresh-timer');
+let motionAlerts = {}; // Store alerts with timestamps for dynamic clearing
 
 /**
  * Fetches the latest data from the Operator Control API.
  */
 async function fetchData() {
     try {
-        const response = await fetch(`${API_BASE_URL}/houses`);
-        if (!response.ok) {
-            throw new Error(`API request failed with status ${response.status}`);
+        const [housesResponse, alertsResponse] = await Promise.all([
+            fetch(`${API_BASE_URL}/houses`),
+            fetch(`${API_BASE_URL}/motion_alerts`)
+        ]);
+        if (!housesResponse.ok || !alertsResponse.ok) {
+            throw new Error(`API request failed`);
         }
-        const housesData = await response.json();
-
-        const alertsResponse = await fetch(`${API_BASE_URL}/motion_alerts`);
+        const housesData = await housesResponse.json();
         const alertsData = await alertsResponse.json();
         
-        return { houses: housesData, motion_alerts: alertsData.activeAlerts || [] };
+        (alertsData.activeAlerts || []).forEach(key => {
+            motionAlerts[key] = Date.now();
+        });
+
+        return { houses: housesData };
     } catch (error) {
         console.error("Failed to fetch data:", error);
-        houseGrid.innerHTML = `
-            <div class="col-12">
-                <div class="alert alert-danger" role="alert">
-                    <h4 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Connection Error!</h4>
-                    <p>Could not connect to the Operator Control service at <strong>${API_BASE_URL}</strong>.</p>
-                    <hr>
-                    <p class="mb-0">Please ensure the backend services are running and accessible.</p>
-                </div>
-            </div>`;
+        houseGrid.innerHTML = `<div class="col-12"><div class="alert alert-danger"><strong>Connection Error:</strong> Could not connect to the backend service.</div></div>`;
         return null;
     }
 }
 
 /**
- * Renders the entire dashboard with the latest data.
+ * Renders the entire dashboard.
  */
 function renderDashboard(data) {
     if (!data) return;
-    renderGlobalAlert(data);
+    
+    const activeAlertKeys = getActiveAlerts();
+    renderGlobalAlert(activeAlertKeys);
 
-    houseGrid.innerHTML = ''; // Clear the grid
+    houseGrid.innerHTML = ''; 
 
     if (Object.keys(data.houses).length === 0) {
         houseGrid.innerHTML = `<p class="text-muted">No houses found or available.</p>`;
@@ -55,24 +56,39 @@ function renderDashboard(data) {
 
     for (const houseId in data.houses) {
         const house = data.houses[houseId];
-        if (house) { // Ensure house object is not null
-            const houseCard = createHouseCard(house, data.motion_alerts);
+        if (house) {
+            const houseCard = createHouseCard(house, activeAlertKeys);
             houseGrid.appendChild(houseCard);
         }
     }
 }
 
 /**
- * Renders a global "THIEF DETECTED!" alert.
+ * Gets a list of alert keys that are not stale and removes old ones.
  */
-function renderGlobalAlert(data) {
-    const alertContainer = document.getElementById('global-alert-container');
-    const motionAlerts = data.motion_alerts;
+function getActiveAlerts() {
+    const now = Date.now();
+    const activeKeys = [];
+    for (const key in motionAlerts) {
+        if ((now - motionAlerts[key]) / 1000 < ALERT_TIMEOUT) {
+            activeKeys.push(key);
+        } else {
+            delete motionAlerts[key];
+        }
+    }
+    return activeKeys;
+}
 
-    if (motionAlerts && motionAlerts.length > 0) {
-        const alertDetails = motionAlerts.map(alertKey => {
+/**
+ * Renders the global "THIEF DETECTED!" alert.
+ */
+function renderGlobalAlert(activeAlertKeys) {
+    const alertContainer = document.getElementById('global-alert-container');
+
+    if (activeAlertKeys.length > 0) {
+        const alertDetails = activeAlertKeys.map(alertKey => {
             const [houseID, floorID, unitID] = alertKey.split('-');
-            return `House ${houseID}, Floor ${floorID}, Unit ${unitID}`;
+            return `House ${houseID}, F${floorID}, U${unitID}`;
         }).join('; ');
 
         alertContainer.innerHTML = `
@@ -81,7 +97,7 @@ function renderGlobalAlert(data) {
                 <div>
                     <h4 class="alert-heading">THIEF DETECTED!</h4>
                     <p class="mb-0">
-                        Immediate motion detected in the following location(s): <strong>${alertDetails}</strong>.
+                        Active motion alert in: <strong>${alertDetails}</strong>.
                     </p>
                 </div>
             </div>`;
@@ -93,9 +109,9 @@ function renderGlobalAlert(data) {
 /**
  * Creates an HTML card element for a single house.
  */
-function createHouseCard(house, motionAlerts) {
+function createHouseCard(house, activeAlertKeys) {
     const isBreached = house.floors.some(floor => 
-        floor.units.some(unit => motionAlerts.includes(`${house.houseID}-${floor.floorID}-${unit.unitID}`))
+        floor.units.some(unit => activeAlertKeys.includes(`${house.houseID}-${floor.floorID}-${unit.unitID}`))
     );
 
     const card = document.createElement('div');
@@ -103,8 +119,8 @@ function createHouseCard(house, motionAlerts) {
     
     let cardBodyHtml = '';
     
-    house.floors.forEach(floor => {
-        floor.units.forEach(unit => {
+    (house.floors || []).forEach(floor => {
+        (floor.units || []).forEach(unit => {
             cardBodyHtml += `<h6 class="mt-3 text-muted">F${floor.floorID}/U${unit.unitID}</h6>`;
             
             if (unit.devicesList && unit.devicesList.length > 0) {
@@ -115,18 +131,19 @@ function createHouseCard(house, motionAlerts) {
                     const badgeColor = getStatusBadgeColor(device.deviceStatus);
                     
                     const unitKey = `${house.houseID}-${floor.floorID}-${unit.unitID}`;
-                    const isAlerting = motionAlerts.includes(unitKey) && device.deviceName.includes('motion');
+                    const isAlerting = activeAlertKeys.includes(unitKey) && device.deviceName.includes('motion');
                     const alertClass = isAlerting ? 'list-group-item-danger' : '';
 
                     let descriptionHtml = `<small class="text-muted d-block">Last Update: ${new Date(device.lastUpdate).toLocaleTimeString()}</small>`;
                     
-                    if (device.deviceName.includes('light_sensor') && device.value !== undefined) {
-                        descriptionHtml += `<small class="text-muted d-block">Light Level: <strong>${device.value} lux</strong></small>`;
+                    if (device.deviceName.includes('light_sensor') && typeof device.value === 'number') {
+                        descriptionHtml += `<small class="text-muted d-block">Light Level: <strong>${device.value.toFixed(2)} lux</strong></small>`;
                     }
 
-                    if (device.deviceName.includes('light_switch') && device.deviceStatus === 'ON') {
-                        const reason = motionAlerts.includes(unitKey) ? 'Motion Detected' : 'Manual';
-                        descriptionHtml += `<small class="text-info d-block">Reason: <strong>${reason}</strong></small>`;
+                    // FIX: This now correctly displays the reason for the light's status, for both ON and OFF states.
+                    if (device.deviceName.includes('light_switch') && device.lastCommandReason) {
+                        const reasonColor = device.deviceStatus === 'ON' ? 'text-info' : 'text-secondary';
+                        descriptionHtml += `<small class="${reasonColor} d-block">Reason: <strong>${device.lastCommandReason}</strong></small>`;
                     }
 
                     cardBodyHtml += `
@@ -169,57 +186,12 @@ function createHouseCard(house, motionAlerts) {
     return card;
 }
 
-// =======================================================
-// HELPER FUNCTIONS (THESE WERE MISSING)
-// =======================================================
-function getDeviceIcon(deviceName, deviceStatus) {
-    if (deviceName.includes('light_sensor')) return 'bi-brightness-high-fill';
-    if (deviceName.includes('light_switch')) return deviceStatus === 'ON' ? 'bi-lightbulb-fill' : 'bi-lightbulb-off';
-    if (deviceName.includes('motion_sensor')) return 'bi-person-walking';
-    return 'bi-hdd';
-}
-
-function getStatusBadgeColor(status) {
-    switch (status) {
-        case 'ON': return 'bg-success';
-        case 'OFF': return 'bg-secondary';
-        case 'Detected': return 'bg-warning text-dark';
-        case 'No Motion': return 'bg-info text-dark';
-        case 'DISABLE': return 'bg-dark';
-        default: return 'bg-light text-dark';
-    }
-}
-
-function getThingSpeakLink(houseId) {
-    const channelMap = { '1': '2884625', '2': '2884626' }; 
-    const channelId = channelMap[houseId];
-    return channelId ? `https://thingspeak.com/channels/${channelId}` : '#';
-}
-// =======================================================
+function getDeviceIcon(d,s){if(d.includes('light_sensor'))return'bi-brightness-high-fill';if(d.includes('light_switch'))return s==='ON'?'bi-lightbulb-fill':'bi-lightbulb-off';if(d.includes('motion_sensor'))return'bi-person-walking';return'bi-hdd'}
+function getStatusBadgeColor(s){switch(s){case'ON':return'bg-success';case'OFF':return'bg-secondary';case'Detected':return'bg-warning text-dark';case'No Motion':return'bg-info text-dark';case'DISABLE':return'bg-dark';default:return'bg-light text-dark'}}
+function getThingSpeakLink(h){const c={'1':'2884625','2':'2884626'};const i=c[h];return i?`https://thingspeak.com/channels/${i}`:'#'}
 
 // --- Theme Toggler ---
-themeToggleButton.addEventListener('click', () => {
-    const currentTheme = document.documentElement.getAttribute('data-bs-theme');
-    if (currentTheme === 'dark') {
-        document.documentElement.setAttribute('data-bs-theme', 'light');
-        themeToggleButton.innerHTML = '<i class="bi bi-moon-stars-fill"></i>';
-    } else {
-        document.documentElement.setAttribute('data-bs-theme', 'dark');
-        themeToggleButton.innerHTML = '<i class="bi bi-sun-fill"></i>';
-    }
-});
+themeToggleButton.addEventListener('click',()=>{const c=document.documentElement.getAttribute('data-bs-theme');const n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-bs-theme',n);themeToggleButton.innerHTML=n==='dark'?'<i class="bi bi-sun-fill"></i>':'<i class="bi bi-moon-stars-fill"></i>'});
 
 // --- Main Application Logic ---
-async function main() {
-    const data = await fetchData();
-    renderDashboard(data);
-}
-
-main();
-setInterval(main, REFRESH_INTERVAL);
-
-let countdown = REFRESH_INTERVAL / 1000;
-setInterval(() => {
-    countdown = countdown > 1 ? countdown - 1 : REFRESH_INTERVAL / 1000;
-    refreshTimerDiv.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Refreshing in ${countdown}s`;
-}, 1000);
+async function main(){const data=await fetchData();renderDashboard(data)}main();setInterval(main,REFRESH_INTERVAL);let countdown=REFRESH_INTERVAL/1000;setInterval(()=>{countdown=countdown>1?countdown-1:REFRESH_INTERVAL/1000;refreshTimerDiv.innerHTML=`<span class="spinner-border spinner-border-sm"></span> Refreshing in ${countdown}s`},1000);

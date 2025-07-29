@@ -6,7 +6,7 @@
 
 A comprehensive, microservice-based IoT system for home security monitoring. This project simulates a network of sensors and actuators to detect and respond to potential intrusions, providing real-time updates through a web dashboard, a ThingSpeak channel, and a Telegram bot.
 
-![Dashboard Screenshot](docs/dashboard.png)
+![Dashboard Screenshot](dashboard.png)
 
 ---
 

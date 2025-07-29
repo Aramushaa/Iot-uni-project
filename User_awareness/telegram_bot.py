@@ -1,151 +1,221 @@
+# changelog:
+# - 2025-07-29: Final version with proactive alerts for all command types.
+# - The bot now listens to both sensor and command topics on MQTT.
+
 import requests
-import sched
 import time
 import json
-from datetime import datetime
 import telepot
 from telepot.loop import MessageLoop
 from telepot.namedtuple import InlineKeyboardMarkup, InlineKeyboardButton
-
-
-class TeleBotDataManager:
-    def __init__(self, operator_control_url):
-        self.operator_control_url = operator_control_url
-        self.devicesDict = {}
-        self.PERIODIC_UPDATE_INTERVAL = 600
-
-        self.scheduler = sched.scheduler(time.time, time.sleep)
-        self.scheduler.enter(0, 1, self.periodic_deviceDict_update, ())
-        self.scheduler.run(blocking=False)
-
-    def get_available_devices(self):
-        if isinstance(self.devicesDict, dict):
-            return list(self.devicesDict.keys())
-        else:
-            return []
-
-    def get_device_data(self, deviceID):
-        try:
-            response = requests.get(f"{self.operator_control_url}sensing_data/{deviceID}")
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to get device data. Error: {e}")
-            return {}
-
-    def get_actuator_status(self, deviceID):
-        try:
-            device = self.devicesDict.get(deviceID)
-            return {dev["deviceName"]: dev["deviceStatus"] for dev in device["devicesList"]}
-        except (KeyError, TypeError):
-            return {}
-
-    def periodic_deviceDict_update(self):
-        try:
-            response = requests.get(f"{self.operator_control_url}houses")
-            data = response.json()
-            if isinstance(data, dict):
-                self.devicesDict = data
-                print("Devices dictionary updated (dict).")
-            else:
-                print(f"Expected a JSON object (dict), got {type(data)} => {data}")
-                self.devicesDict = {}
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to update devices dictionary. Error: {e}")
-            self.devicesDict = {}
-        self.scheduler.enter(self.PERIODIC_UPDATE_INTERVAL, 1, self.periodic_deviceDict_update, ())
-
+from MyMQTT2 import MyMQTT 
 
 class TeleBot:
-    def __init__(self, token, operator_control_url, ownership_file):
+    def __init__(self, token, operator_control_url, ownership_file, catalog_url):
         self.token = token
         self.operator_control_url = operator_control_url
         self.ownership_file = ownership_file
-        self.botManager = TeleBotDataManager(operator_control_url)
         self.bot = telepot.Bot(self.token)
+        self.load_ownership_data()
+
+        # NEW: Initialize and start the MQTT client for real-time alerts
+        self.mqtt_client = None
+        try:
+            broker, port, main_topic = self.get_mqtt_config(catalog_url)
+            client_id = f"TelegramBot_Alerts_{int(time.time())}"
+            # The 'self' object is passed as the notifier
+            self.mqtt_client = MyMQTT(client_id, broker, port, self)
+            self.mqtt_client.start()
+            # Subscribe to both sensor and command topics
+            self.mqtt_client.mySubscribe(f"{main_topic}/sensors/#")
+            self.mqtt_client.mySubscribe(f"{main_topic}/commands/#")
+            print(f"[TELEGRAM MQTT] Subscribed to all topics.")
+        except Exception as e:
+            print(f"[TELEGRAM MQTT ERROR] Could not start MQTT client: {e}")
+
         MessageLoop(self.bot, {'chat': self.on_chat_message, 'callback_query': self.on_callback_query}).run_as_thread()
+        print("[TELEGRAM] Bot is now listening for commands...")
 
-        with open(self.ownership_file, 'r') as fp:
-            self.ownership_dict = json.load(fp)
+    def load_ownership_data(self):
+        try:
+            with open(self.ownership_file, 'r') as fp:
+                self.ownership_dict = json.load(fp)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.ownership_dict = {}
 
-        self.available_devices = []
-        self.update_available_devices()
+    def get_mqtt_config(self, catalog_url):
+        r_broker = requests.get(f"{catalog_url}/broker", timeout=5)
+        r_broker.raise_for_status()
+        broker_info = r_broker.json()
+        r_topic = requests.get(f"{catalog_url}/topic", timeout=5)
+        r_topic.raise_for_status()
+        main_topic = r_topic.text.strip('"')
+        return broker_info["IP"], int(broker_info["port"]), main_topic
 
-    def update_available_devices(self):
-        deviceIDs = self.botManager.get_available_devices()
-        self.available_devices = [
-            dev for dev in deviceIDs
-            if dev not in self.ownership_dict.values()
-        ]
+    def notify(self, topic, payload):
+        """MQTT callback for ALL real-time alerts."""
+        try:
+            parts = topic.split("/")
+            if len(parts) < 6: return
+
+            topic_type = parts[1]
+            houseID = parts[2]
+            unit_str = f"House {houseID}, F{parts[3]}/U{parts[4]}"
+            
+            # Find the user who owns this house
+            owner_id = None
+            for user_id, owned_house_id in self.ownership_dict.items():
+                if str(owned_house_id) == str(houseID):
+                    owner_id = user_id
+                    break
+            
+            if not owner_id:
+                return # No one owns this house, so no alert to send
+
+            # Handle Motion Alerts from Sensor Topic
+            if topic_type == "sensors" and "motion_sensor" in parts[-1]:
+                value = payload.get("e", [{}])[0].get("v")
+                if value == "Detected":
+                    alert_message = f"🚨 *MOTION ALERT!* 🚨\n\nMotion detected in *{unit_str}*."
+                    self.bot.sendMessage(owner_id, alert_message, parse_mode="Markdown")
+            
+            # START OF CHANGE: The following block for light status is now disabled.
+            # Handle Light Status Alerts from Command Topic
+            #
+            # elif topic_type == "commands" and "light_switch" in parts[-1]:
+            #     event = payload.get("e", [{}])[0]
+            #     command = event.get("v")
+            #     
+            #     reason = "an automated rule" # Default reason
+            #
+            #     alert_message = f"💡 *LIGHT STATUS CHANGE* 💡\n\nLight in *{unit_str}* was turned *{command}* due to `{reason}`."
+            #     self.bot.sendMessage(owner_id, alert_message, parse_mode="Markdown")
+            # END OF CHANGE
+
+        except Exception as e:
+            print(f"[TELEGRAM MQTT ERROR] Could not process alert message: {e}")
+
+
+    def get_house_data(self):
+        try:
+            response = requests.get(f"{self.operator_control_url}/houses")
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"[TELEGRAM ERROR] Could not fetch house data: {e}")
+            return {}
 
     def on_chat_message(self, msg):
         content_type, chat_type, chat_id = telepot.glance(msg)
-        command = msg['text']
+        command = msg.get('text', '').strip()
 
-        if command == "/start":
-            self.bot.sendMessage(chat_id, "Welcome to ThiefDetector Bot!")
-        elif command == "/menu":
+        if command.lower() in ["/start", "/menu"]:
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text='Track a device', callback_data='track_device')],
-                [InlineKeyboardButton(text='Claim a device', callback_data='claim_device')]
+                [InlineKeyboardButton(text='📊 Track My House', callback_data='track_my_house')],
+                [InlineKeyboardButton(text='🏠 Claim a House', callback_data='claim_a_house')],
+                [InlineKeyboardButton(text='🌐 Track All Houses', callback_data='track_all_houses')]
             ])
-            self.bot.sendMessage(chat_id, "What would you like to do?", reply_markup=keyboard)
+            self.bot.sendMessage(chat_id, "Welcome to the ThiefDetector Bot! What would you like to do?", reply_markup=keyboard)
         else:
-            self.bot.sendMessage(chat_id, "Sorry, I couldn't understand that command.")
+            self.bot.sendMessage(chat_id, "Sorry, I couldn't understand that command. Please use /menu.")
 
     def on_callback_query(self, msg):
         query_id, from_id, query_data = telepot.glance(msg, flavor='callback_query')
+        from_id_str = str(from_id)
+        all_house_data = self.get_house_data()
 
-        if query_data == "claim_device":
-            if not self.available_devices:
-                self.bot.sendMessage(from_id, "No devices are currently available.")
+        if query_data == "claim_a_house":
+            all_houses = list(all_house_data.keys())
+            if not all_houses:
+                self.bot.sendMessage(from_id, "No houses are currently online.")
                 return
+            
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=device, callback_data=f"claim_{device}")]
-                for device in self.available_devices
+                [InlineKeyboardButton(text=f"House {house_id}", callback_data=f"claim_{house_id}")]
+                for house_id in all_houses
             ])
-            self.bot.sendMessage(from_id, "Available devices:", reply_markup=keyboard)
+            self.bot.sendMessage(from_id, "Please select a house to claim:", reply_markup=keyboard)
+        
         elif query_data.startswith("claim_"):
-            deviceID = query_data.split("_", 1)[1]
-            if str(from_id) in self.ownership_dict:
-                self.bot.sendMessage(from_id, "You already own a device.")
-            else:
-                self.ownership_dict[str(from_id)] = deviceID
-                self.update_available_devices()
-                self.bot.sendMessage(from_id, f"You've successfully claimed device {deviceID}!")
-        elif query_data == "track_device":
-            if str(from_id) not in self.ownership_dict:
-                self.bot.sendMessage(from_id, "You don't own a device yet.")
+            houseID = query_data.split("_", 1)[1]
+            self.ownership_dict[from_id_str] = houseID
+            self.save_ownership_data()
+            self.bot.answerCallbackQuery(query_id, text=f"You now own House {houseID}")
+            self.bot.sendMessage(from_id, f"✅ You have successfully claimed House {houseID}!")
+
+        elif query_data == "track_my_house":
+            if from_id_str not in self.ownership_dict:
+                self.bot.answerCallbackQuery(query_id, text="You don't own a house yet.")
                 return
-            deviceID = self.ownership_dict[str(from_id)]
-            self.bot.sendMessage(from_id, f"Fetching data for your device {deviceID}...")
-            sensing_data = self.botManager.get_device_data(deviceID)
-            actuator_status = self.botManager.get_actuator_status(deviceID)
-            sensing_str = "\n".join([f"{sensor}: {value}" for sensor, value in sensing_data.items()])
-            self.bot.sendMessage(from_id, f"Sensing Data:\n{sensing_str}")
-            if isinstance(actuator_status, dict):
-                actuator_str = "\n".join([f"{actuator}: {status}" for actuator, status in actuator_status.items()])
-            else:
-                actuator_str = "No actuators found."
-            self.bot.sendMessage(from_id, f"Actuator Status:\n{actuator_str}")
+
+            houseID = self.ownership_dict[from_id_str]
+            house_data = all_house_data.get(houseID)
+            
+            if not house_data:
+                self.bot.sendMessage(from_id, f"Could not retrieve data for your house (House {houseID}). It might be offline.")
+                return
+
+            report = self.format_house_report(house_data)
+            self.bot.sendMessage(from_id, report, parse_mode="Markdown")
+
+        elif query_data == "track_all_houses":
+            if not all_house_data:
+                self.bot.sendMessage(from_id, "No houses are currently online.")
+                return
+            
+            full_report = "*System Status Overview*\n" + "="*25 + "\n\n"
+            for house_id, house_data in all_house_data.items():
+                full_report += self.format_house_report(house_data) + "\n" + "="*25 + "\n\n"
+            
+            self.bot.sendMessage(from_id, full_report, parse_mode="Markdown")
+
+    def format_house_report(self, house_data):
+        house_id = house_data.get('houseID', 'N/A')
+        report = f"📊 *Status for {house_data.get('houseName', 'House ' + house_id)}*\n\n"
+        
+        for floor in house_data.get("floors", []):
+            for unit in floor.get("units", []):
+                report += f"*F{floor.get('floorID', '?')}/U{unit.get('unitID', '?')}*:\n"
+                if not unit.get("devicesList"):
+                    report += "- _No devices found._\n"
+                    continue
+                
+                for device in unit.get("devicesList", []):
+                    name = device.get("deviceName", "Unknown").replace("_", " ").title()
+                    status = device.get("deviceStatus", "N/A")
+                    icon = "💡" if "light" in name.lower() else "🏃"
+                    
+                    report += f"- {icon} *{name}*: `{status}`\n"
+                    
+                    if "lastCommandReason" in device and device["lastCommandReason"]:
+                        report += f"  `↳ Reason: {device['lastCommandReason']}`\n"
+
+        return report
 
     def save_ownership_data(self):
         with open(self.ownership_file, 'w') as fp:
             json.dump(self.ownership_dict, fp, indent=4)
 
-
 if __name__ == "__main__":
-    # In Docker, the operator-control service is available at this address
+    catalog_url = "http://catalog:8080/"
     operator_control_url = "http://operator-control:8095/" 
-    # FIX: The path is relative to the working directory /app/User_awareness
     ownership_file = "device_ownership.json" 
-    token = "7841720164:AAG8L5p4OI7-OKyg1kASAmwO1MVijHEU5XA" 
-
-    bot = TeleBot(token, operator_control_url, ownership_file)
+    token = "your_telegram_bot_token_here"  # Replace with your actual token
 
     try:
+        print("[TELEGRAM] Deleting any existing webhook...")
+        bot_instance = telepot.Bot(token)
+        bot_instance.deleteWebhook()
+        print("[TELEGRAM] Webhook deleted successfully.")
+    except Exception as e:
+        print(f"[TELEGRAM WARNING] Could not delete webhook, but continuing: {e}")
+
+    bot = TeleBot(token, operator_control_url, ownership_file, catalog_url)
+
+    try:
+        print("Telegram Bot is now running. Press Ctrl+C to exit.")
         while True:
             time.sleep(10)
-            bot.save_ownership_data()
     except KeyboardInterrupt:
-        print("Shutting down bot...")
+        print("\nShutting down bot...")
         bot.save_ownership_data()
