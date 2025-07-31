@@ -1,3 +1,4 @@
+```mermaid
 graph TD
     subgraph User Awareness
         WebInterface[Web Dashboard]
@@ -44,3 +45,4 @@ graph TD
     MessageBroker -->|MQTT: Commands| Actuators
 
     ThingSpeakAdaptor -->|REST: Post Data| ThingSpeakCloud
+```
