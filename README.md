@@ -6,7 +6,7 @@
 
 A comprehensive, microservice-based IoT system for home security monitoring. This project simulates a network of sensors and actuators to detect and respond to potential intrusions, providing real-time updates through a web dashboard, a ThingSpeak channel, and a Telegram bot.
 
-![Dashboard Screenshot](dashboard.png)
+![Dashboard Screenshot](docs/dashboard.png)
 
 ---
 
@@ -35,57 +35,25 @@ A comprehensive, microservice-based IoT system for home security monitoring. Thi
 
 The system follows a microservice architecture where each component is a standalone Docker container. Services communicate through REST APIs for configuration and an MQTT message broker for real-time events.
 
-```mermaid
-graph TD
-    subgraph User Interfaces
-        A[Web Dashboard]
-        B[Telegram Bot]
-    end
+![Architecture Diagram](docs/Thief_Detector_diagram.jpg)
 
-    subgraph Backend Services
-        C[Operator Control API]
-        D[Control Unit]
-        E[Catalog]
-        F[ThingSpeak Adaptor]
-    end
+### Microservice Connections
 
-    subgraph Simulated Devices
-        G[Sensors]
-        H[Actuators]
-    end
+The following table details the communication paths between each service:
 
-    subgraph Message Broker
-        MQTT
-    end
-
-    A --> |HTTP GET| C
-    B --> |HTTP GET| C
-    C --> |HTTP GET| E
-    C --> |HTTP GET| G
-    C --> |HTTP GET| H
-
-    G --> |Publish Sensor Data| MQTT
-    MQTT --> |Subscribe to Sensors| D
-    MQTT --> |Subscribe to Sensors| F
-    D --> |Publish Commands| MQTT
-    MQTT --> |Subscribe to Commands| H
-    F --> |HTTP POST| ThingSpeak([ThingSpeak Cloud])
-```
-
----
-
-## 🧩 Components
-
-| Component              | File(s)                                       | Purpose                                                                                |
-| ---------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------- |
-| **Catalog Registry** | `Catalog/catalog_registry.py`                 | The single source of truth. Manages service discovery and device registration.         |
-| **Sensor Connectors** | `Device_connectors/DC_instancer.py`           | Simulates multiple sensor devices and publishes their data to MQTT.                    |
-| **Actuator Connectors**| `Device_connectors/DC_instancer_actuator.py`  | Simulates multiple actuators and subscribes to MQTT command topics.                    |
-| **Control Unit** | `Control_units/CU_instancer.py`               | The system's brain. Subscribes to sensor data and publishes commands based on logic.   |
-| **ThingSpeak Adaptor** | `ThingSpeak/adaptor.py`                       | Listens to MQTT and pushes data to the ThingSpeak cloud platform for visualization.    |
-| **Operator Control** | `Operator_control/operator_control.py`        | An API Gateway that aggregates data from all services for the user interfaces.         |
-| **Web Interface** | `User_awareness/frontEnd/`                    | A static web dashboard that polls the Operator Control API for real-time updates.      |
-| **Telegram Bot** | `User_awareness/telegram_bot.py`              | Allows users to interact with their devices via the Telegram app.                      |
+| From Service             | To Service                 | Connection Type | Publisher/Provider or Subscriber/Consumer | Purpose                                            |
+| ------------------------ | -------------------------- | --------------- | ----------------------------------------- | -------------------------------------------------- |
+| **Sensors** | **Message Broker** | MQTT            | Publisher                                 | Publishes sensor data (light, motion).             |
+| **Control Unit** | **Message Broker** | MQTT            | Subscriber & Publisher                    | Subscribes to sensor data, publishes commands.     |
+| **Actuators** | **Message Broker** | MQTT            | Subscriber                                | Subscribes to commands to change its status.       |
+| **ThingSpeak Adaptor** | **Message Broker** | MQTT            | Subscriber                                | Subscribes to sensor data.                         |
+| **Telegram Bot** | **Message Broker** | MQTT            | Subscriber                                | Subscribes to alerts.                              |
+| **Operator Control** | **Sensors & Actuators**| REST            | Consumer                                  | Gets the current list/status of devices.           |
+| **Operator Control** | **Home Catalog** | REST            | Consumer                                  | Gets the overall structure of houses/units.        |
+| **Web Interface** | **Operator Control** | REST            | Consumer                                  | Gets all data needed for the dashboard.            |
+| **Telegram Bot** | **Operator Control** | REST            | Consumer                                  | Gets detailed status reports on demand.            |
+| **Control Unit** | **Home Catalog** | REST            | Provider                                  | Updates the catalog with the latest device status and command reason. |
+| *All Services* | **Home Catalog** | REST            | Consumer                                  | Get initial configuration (broker IP, etc.).       |
 
 ---
 
