@@ -200,7 +200,8 @@ if __name__ == "__main__":
     catalog_url = "http://catalog:8080/"
     operator_control_url = "http://operator-control:8095/" 
     ownership_file = "device_ownership.json" 
-    token = "7841720164:AAG8L5p4OI7-OKyg1kASAmwO1MVijHEU5XA"  # Replace with your actual token
+    token = "Replace with your actual token "  
+    
 
     try:
         print("[TELEGRAM] Deleting any existing webhook...")
