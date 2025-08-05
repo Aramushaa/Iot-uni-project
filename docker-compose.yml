@@ -121,3 +121,16 @@ services:
     restart: on-failure
     environment:
       - TZ=Europe/Rome
+
+  admin-panel:
+    build: .
+    command: python admin_panel/admin_panel.py
+    ports:
+      - "8081:8081"
+    volumes:
+      - .:/app
+    depends_on:
+      - catalog
+    restart: on-failure
+    environment:
+      - TZ=Europe/Rome

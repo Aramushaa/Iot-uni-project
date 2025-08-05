@@ -200,7 +200,7 @@ if __name__ == "__main__":
     catalog_url = "http://catalog:8080/"
     operator_control_url = "http://operator-control:8095/" 
     ownership_file = "device_ownership.json" 
-    token = "insert_your_telegram_bot_token_here"  # Replace with your actual token
+    token = "your telegram token"  # Replace with your actual token
     
 
     try:
