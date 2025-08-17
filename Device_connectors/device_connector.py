@@ -63,7 +63,7 @@ class Device_connector():
             "e": [{"n": "sensorKind", "u": "unit", "t": None, "v": None}]
         }
 
-        # --- NEW: Formally create the motion sensor device ---
+
         # It's important that this device has a unique ID. We'll base it on the light sensor's ID.
         light_sensor_id = self.DCConfiguration["devicesList"][0]["deviceID"]
         motion_sensor_device = {

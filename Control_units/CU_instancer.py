@@ -39,7 +39,6 @@ class CU_instancer():
         self.scheduler.daemon = True
         self.scheduler.start()
 
-    # --- THIS IS THE MISSING FUNCTION THAT HAS BEEN ADDED ---
     def get_mqtt_config(self):
         """Fetches broker details and the main topic from the catalog."""
         print(f"[INFO] CU Instancer fetching MQTT config from {self.catalogAddress}...")

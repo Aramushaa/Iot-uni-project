@@ -2,7 +2,6 @@
 # - 2025-07-21: Converted from a polling to an event-driven model by adding an MQTT client.
 # - 2025-07-21: Motion alerts are now received instantly and reliably.
 
-# changelog:
 # - 2025-07-27: Corrected the URL in fetch_unit_devices to include the /devices endpoint.
 # - 2025-07-27: Removed debug prints for cleaner logs.
 # - 2025-07-29: Added logic to inject `lastCommandReason` for light switches based on motion alerts.
@@ -102,7 +101,7 @@ class OperatorControl:
                     # Fetch the raw device list first
                     unit["devicesList"] = self.fetch_unit_devices(unit)
 
-                    # START of the new logic
+                    
                     unit_key = f"{house.get('houseID')}-{floor.get('floorID')}-{unit.get('unitID')}"
                     
                     # Check if the current unit has a recent motion alert
@@ -121,7 +120,7 @@ class OperatorControl:
                                     device["lastCommandReason"] = "Automatic Rule"
                             else:  # Status is OFF
                                 device["lastCommandReason"] = "No Motion / Timed Out"
-                    # END of the new logic
+                    
 
         return real_time_houses
 

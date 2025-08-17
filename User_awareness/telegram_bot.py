@@ -79,18 +79,6 @@ class TeleBot:
                     alert_message = f"🚨 *MOTION ALERT!* 🚨\n\nMotion detected in *{unit_str}*."
                     self.bot.sendMessage(owner_id, alert_message, parse_mode="Markdown")
             
-            # START OF CHANGE: The following block for light status is now disabled.
-            # Handle Light Status Alerts from Command Topic
-            #
-            # elif topic_type == "commands" and "light_switch" in parts[-1]:
-            #     event = payload.get("e", [{}])[0]
-            #     command = event.get("v")
-            #     
-            #     reason = "an automated rule" # Default reason
-            #
-            #     alert_message = f"💡 *LIGHT STATUS CHANGE* 💡\n\nLight in *{unit_str}* was turned *{command}* due to `{reason}`."
-            #     self.bot.sendMessage(owner_id, alert_message, parse_mode="Markdown")
-            # END OF CHANGE
 
         except Exception as e:
             print(f"[TELEGRAM MQTT ERROR] Could not process alert message: {e}")
@@ -200,7 +188,7 @@ if __name__ == "__main__":
     catalog_url = "http://catalog:8080/"
     operator_control_url = "http://operator-control:8095/" 
     ownership_file = "device_ownership.json" 
-    token = "your telegram token"  # Replace with your actual token
+    token = "replace your token"  # Replace with your actual token
     
 
     try:
