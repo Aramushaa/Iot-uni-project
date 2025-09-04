@@ -48,13 +48,12 @@ Services communicate through REST APIs for configuration and use MQTT for real-t
 | **Control Unit**         | **Message Broker**         | MQTT            | Subscriber & Publisher                   | Subscribes to sensor data, publishes control commands.                  |
 | **Actuators**            | **Message Broker**         | MQTT            | Subscriber                               | Subscribes to control commands to change state.                         |
 | **ThingSpeak Adaptor**   | **Message Broker**         | MQTT            | Subscriber                               | Subscribes to sensor data for cloud logging.                            |
-| **Telegram Bot**         | **Message Broker**         | MQTT            | Subscriber                               | Subscribes to motion and system alerts.                                 |
-| **Operator Control**     | **Sensors & Actuators**    | REST            | Consumer                                 | Fetches current list/status of devices.                                 |
+| **Telegram Bot**         | **Message Broker**         | MQTT            | Subscriber                               | Subscribes to motion and system alerts.                                 |                                 |
 | **Operator Control**     | **Home Catalog**           | REST            | Consumer                                 | Retrieves overall structure of houses/units.                            |
 | **Web Interface**        | **Operator Control**       | REST            | Consumer                                 | Retrieves all dashboard data.                                           |
 | **Telegram Bot**         | **Operator Control**       | REST            | Consumer                                 | Retrieves on-demand status reports.                                     |
-| **Admin Panel**          | **Home Catalog**           | REST            | Consumer & Provider                      | Reads/updates system configuration (add/remove/edit items).             |
-| **Control Unit**         | **Home Catalog**           | REST            | Provider                                 | Updates device status and action reasons.                               |
+| **Admin Panel**          | **Home Catalog**           | REST            | Consumer                     | Reads/updates system configuration (add/remove/edit items).             |
+| **Control Unit**         | **Home Catalog**           | REST            | Consumer                                 | Updates device status and action reasons.                               |
 | *All Services*           | **Home Catalog**           | REST            | Consumer                                 | Retrieves initial configuration (e.g., broker IP).                      |
 
 ---
