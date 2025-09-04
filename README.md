@@ -38,7 +38,7 @@ This project simulates a network of sensors and actuators to detect and respond 
 The system follows a modular microservice architecture, where each component runs in its own Docker container.  
 Services communicate through REST APIs for configuration and use MQTT for real-time message exchange.
 
-![Architecture Diagram](docs/Thief_Detector_diagram.jpg)
+![Architecture Diagram](docs/Thief_Detector_diagram.png)
 
 ### Microservice Connections
 
